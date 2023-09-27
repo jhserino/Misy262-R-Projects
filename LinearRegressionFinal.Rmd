@@ -1,0 +1,403 @@
+---
+title: "John Serino - Linear Regression Final Project"
+output: html_notebook
+---
+Using the below dataset found off of Kaggle
+https://www.kaggle.com/datasets/larsen0966/student-performance-data-set?select=student-por.csv
+
+I downloaded the dataset and then used the files menu in the bottom right screen to access the data and then import it
+
+
+```{r}
+student <- student_por #copy student_por dataset into new 'student' dataset to make it easier to work with
+head(student) #display the first 6 rows of data in the dataset
+```
+
+
+```{r}
+tail(student) #display the last 6 rows of data in the dataset
+```
+
+
+```{r}
+summary(student) #summarizes each of the features in the dataset, giving type for features of type character, and giving values for minimum, maximum, 1st Quartile, median, mean, and 3rd Quartile for features with continuous numerical values
+```
+```{r}
+str(student) #gives the type of each feature frame as well as the first four pieces of data for features of type character, and the first 10 pieces of data for features of type numerical
+```
+
+
+```{r}
+is.na(student) #creates a matrix to determine if there are any missing values in the data with 'FALSE' representing there not be a missing value in the spot, and 'TRUE' otherwise
+```
+
+
+```{r}
+#Run code below to see missing values; what's the percentage of missing values?
+library(naniar) #import naniar package to create heatmap for percentage of missing values
+vis_miss(student) #creates the heatmap
+
+
+library(Amelia) #loads the Amelia package into the file
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(student,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+#We can see that there are several missing values
+```
+
+```{r}
+# convert all feature columns of type character to numerical values by factoring each column and turning their factors into numerical values
+student$school<-as.numeric(factor(student$school)) #gives numerical value to school feature
+student$sex<-as.numeric(factor(student$sex)) #gives numerical value to sex feature
+student$address<-as.numeric(factor(student$address)) #gives numerical value to address feature
+student$famsize<-as.numeric(factor(student$famsize)) #gives numerical value to famsize feature
+student$Pstatus<-as.numeric(factor(student$Pstatus)) #gives numerical value to Pstatus feature
+student$Mjob<-as.numeric(factor(student$Mjob)) #gives numerical value to Mjob feature
+student$Fjob<-as.numeric(factor(student$Fjob)) #gives numerical value to Fjob feature
+student$reason<-as.numeric(factor(student$reason)) #gives numerical value to reason feature
+student$guardian<-as.numeric(factor(student$guardian)) #gives numerical value to guardian feature
+student$schoolsup<-as.numeric(factor(student$schoolsup)) #gives numerical value to schoolsup feature
+student$famsup<-as.numeric(factor(student$famsup)) #gives numerical value to famsup feature
+student$paid<-as.numeric(factor(student$paid)) #gives numerical value to paid feature
+student$activities<-as.numeric(factor(student$activities)) #gives numerical value to activities feature
+student$nursery<-as.numeric(factor(student$nursery)) #gives numerical value to nursery feature
+student$higher<-as.numeric(factor(student$higher)) #gives numerical value to higher feature
+student$internet<-as.numeric(factor(student$internet)) #gives numerical value to internet feature
+student$romantic<-as.numeric(factor(student$romantic)) #gives numerical value to romantic feature
+
+```
+
+```{r}
+head(student) #we use the head() function to see that all features have successfully been turned into numerical values
+```
+
+```{r}
+library(ggplot2)
+ggplot(data= student,mapping = aes(x = G3, y = G2)) + geom_point() #creates a scatterplot mapping G3 against G2 to see if there is linearity between our target and the feature columns
+# we see that there is linearity between the target and the feature
+```
+
+
+
+
+```{r}
+library(missForest) #imports the missForest package so that we can work easily with missing data
+#Run the code below which replaces values with 10% missing values; 
+RNGkind(sample.kind = "Rounding") #This line randomly generates missing value numbers
+
+# The code below seeds 10% missing values since student has no missing values so that we can use the MICE package for imputation
+
+set.seed(123) #set a seed for the randomizer
+student.mis <- prodNA(student, noNA = 0.1) #create a new dataset 'student.mis' that removes 10% of the data in the 'Credit' dataset
+head(student.mis) #displays the first 6 rows of data for 'student.mis'
+```
+
+```{r}
+library(naniar) #import naniar package to create heatmap for percentage of missing values
+vis_miss(student.mis) #creates the heatmap
+
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(student.mis,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+
+# Using each graph we can see that 10% of the total data is missing
+```
+
+
+```{r}
+library(mice) #imports the mice package
+
+#impute the data using the mice package with 5 iterations
+imputed_data <- mice(student, m = 5)  
+imputed_student <- complete(imputed_data, action = "long") # finishes the mice imputation
+```
+
+```{r}
+head(imputed_student) #shows the first 6 rows of data of our newly imputed dataset
+```
+
+
+```{r}
+#Look for missing values again by running code below
+vis_miss(imputed_student) #We see there are no missing values
+
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(imputed_student,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+#We can see that there are no more missing values
+```
+
+```{r}
+boxplot(imputed_student) #creates a boxplot of all features so that we can see which features have a significant amount of outliers
+#abscenses has a lot of outliers
+```
+
+```{r}
+library(corrplot) #installs the corrplot package for the cor() function
+library(dplyr) #Installs the dplyr package
+cred.cor<-cor(select(imputed_student,-.imp,-.id)) #creates correlation coefficients for 'imputed_student' with all features aside from the one with a '-' sign above
+corrplot(cred.cor, method="number") #creates a correlation coefficient chart
+
+#G1 and G2 have very high correlation coefficients relative to G3 so we probably shouldn't use them in modeling as they have very high collinearity to our target feature of G3.
+```
+
+```{r}
+
+#The graph below is very much left skewed 
+library(ggplot2) #imports the ggplot2 package into the file
+imputed_student %>% #pipes in a plot displaying the 'G3' variable by the property 'stat_density' with the color theme 'theme_bw()' for black and white
+  ggplot(aes(G3)) +
+  stat_density() + 
+  theme_bw()
+```
+
+
+```{r}
+#Commenting out for project re-runs to occur faster
+# Data looks does not have good standardization as id is all over the place while all other categories have very similarly low data
+#
+library(heatmaply) #Imports the heatmaply feature for heatmap creation
+heatmaply(imputed_student, #creates heatmap with labels
+  xlab = "Features",
+  ylab = "Participants", 
+  main = "Raw data")
+```
+
+```{r}
+# commenting out to increase re-load times
+# the data is normalized much better with a much better gradient than we saw previously
+library(heatmaply) #Imports the heatmaply feature for heatmap creation
+heatmaply(
+  normalize(imputed_student), #creates heatmap with labels
+  xlab = "Features",
+  ylab = "Participants", 
+  main = "Raw data")
+```
+
+
+
+```{r}
+library(caTools) #We import the 'caTools' package into the file
+#set a seed 
+set.seed(123)
+
+
+
+# we split the imputed_student data into two different sets, the data_sample set with 75% of the data and everything else which is 25% of the data
+data_sample <- sample(c(TRUE, FALSE), nrow(imputed_student), replace = T, prob = c(0.75, 0.25))
+
+# create a train for the future model using 75% of the data
+train <- imputed_student[data_sample, ]
+# create a test for the future model using the remaining 25% of the data
+test <- imputed_student[!data_sample, ]
+```
+
+
+
+```{r}
+
+model1 <- lm(G3 ~ .-G3, data = train) #creates a linear regression model using each of the features in the dataset aside from the target feature 'G3"
+summary(model1) #creates a summary of the model telling us which features are most significant, and giving us residuals, standard deviations, and other useful data
+
+test$predicted.G3 <- predict(model1,test) # uses the model and the testing set to predict values for G3 and assigns it to a new column 'predicted.G3' within the 'test' dataset
+
+#calculation for rmse by subtracting actual by predicted and then taking the square root of the mean of the error squared
+error <- test$G3-test$predicted.G3
+rmse <- sqrt(mean(error)^2)
+rmse
+
+res <- residuals(model1) #assigns residuals to values
+
+# Convert residuals to a DataFrame 
+res <- as.data.frame(res)
+
+#creates a histogram with dataset residuals and shows 'res' values on the x-axis, and their counts on the y-axis
+ggplot(res,aes(res)) +  geom_histogram(fill='blue',alpha=0.5)
+
+library(plotly) # Import the 'plotly' package
+pl1 <-test %>%  #pipe in a graph of predicted values vs actual values
+  ggplot(aes(G3,predicted.G3)) +
+  geom_point(alpha=0.5) + 
+  stat_smooth(aes(colour='black')) +
+  xlab('Actual value of G3') +
+  ylab('Predicted value of G3')+
+  theme_bw()
+
+ggplotly(pl1)
+
+
+plot(model1) #shows all residuals plots such as Residuals vs Fitted, Q-Q residuals, Scale-Location, and Residuals vs Leverage
+
+
+# our residuals graph is all right as it resembles a bell curve around the 0 mark, but we would like the peak to be at 0 rather than it being more of a valley
+# The scatter plot graph is very good as all of our points are around the red line and have good variance of above vs below it
+# our other residuals graphs are all right, they work, but could definitely be better
+
+# our rmse score is pretty good, but we will now remove the G1 and G2 featuers as their Pearson coefficients were roughly .9 and therefore too close to the target feature to be able to create a useful model
+```
+
+
+```{r}
+
+model2 <- lm(G3 ~ school + address + sex + health + failures, data = train)
+summary(model2)#creates a summary of the model telling us which features are most significant, and giving us residuals, standard deviations, and other useful data
+
+test$predicted.G3 <- predict(model2,test) # uses the model and the testing set to predict values for G3 and assigns it to a new column 'predicted.G3' within the 'test' dataset
+
+
+#calculation for rmse by subtracting actual by predicted and then taking the square root of the mean of the error squared
+error <- test$G3-test$predicted.G3
+rmse <- sqrt(mean(error)^2)
+rmse
+
+res <- residuals(model2) #assigns residuals to values
+
+# Convert residuals to a DataFrame 
+res <- as.data.frame(res)
+
+pl2 <-test %>%  #pipe in a graph of predicted values vs actual values
+  ggplot(aes(G3,predicted.G3)) +
+  geom_point(alpha=0.5) + 
+  stat_smooth(aes(colour='black')) +
+  xlab('Actual value of G3') +
+  ylab('Predicted value of G3')+
+  theme_bw()
+
+ggplotly(pl2)
+
+#creates a histogram with dataset residuals and shows 'res' values on the x-axis, and their counts on the y-axis
+ggplot(res,aes(res)) +  geom_histogram(fill='blue',alpha=0.5)
+
+
+plot(model2) #shows all residuals plots such as Residuals vs Fitted, Q-Q residuals, Scale-Location, and Residuals vs Leverage
+
+# our residuals graph is all right as it resembles a bell curve around the 0 mark, it is better than the previous one, but still it would ne nice if there wasn't a valley directly to the left of 0
+# The scatter plot graph is not great as the points are pretty far from the red line although they do have good variance
+# our other residuals graphs are all right, they work, but could definitely be better
+
+# our rmse score has improved, but can definitely be improved further
+```
+
+```{r}
+
+model3 <- lm(G3 ~ school + address + sex + health + failures + schoolsup + famsup, data = train)
+summary(model3) #creates a summary of the model telling us which features are most significant, and giving us residuals, standard deviations, and other useful data
+
+test$predicted.G3 <- predict(model3,test) # uses the model and the testing set to predict values for G3 and assigns it to a new column 'predicted.G3' within the 'test' dataset
+
+
+#calculation for rmse by subtracting actual by predicted and then taking the square root of the mean of the error squared
+error <- test$G3-test$predicted.G3
+rmse <- sqrt(mean(error)^2)
+rmse
+
+res <- residuals(model3) #assigns residuals to values
+
+# Convert residuals to a DataFrame 
+res <- as.data.frame(res)
+
+
+pl3 <-test %>%  #pipe in a graph of predicted values vs actual values
+  ggplot(aes(G3,predicted.G3)) +
+  geom_point(alpha=0.5) + 
+  stat_smooth(aes(colour='black')) +
+  xlab('Actual value of G3') +
+  ylab('Predicted value of G3')+
+  theme_bw()
+
+ggplotly(pl3)
+
+#creates a histogram with dataset residuals and shows 'res' values on the x-axis, and their counts on the y-axis
+ggplot(res,aes(res)) +  geom_histogram(fill='blue',alpha=0.5)
+
+
+plot(model3) #shows all residuals plots such as Residuals vs Fitted, Q-Q residuals, Scale-Location, and Residuals vs Leverage
+
+# our residuals graph is pretty perfect as it has a perfect bell curve around the 0 mark
+# The scatter plot graph is once again not great as the predicted points are not close to the red line
+# our other residuals graphs are all right, they work, but could definitely be better
+
+# our rmse score is improved again, but still can be improved by adding other features to our predictor
+```
+
+```{r}
+
+model4 <- lm(G3 ~ school + reason + address + sex + health + failures + schoolsup + famsup, data = train)
+summary(model4) #creates a summary of the model telling us which features are most significant, and giving us residuals, standard deviations, and other useful data
+
+test$predicted.G3 <- predict(model4,test) # uses the model and the testing set to predict values for G3 and assigns it to a new column 'predicted.G3' within the 'test' dataset
+
+
+#calculation for rmse by subtracting actual by predicted and then taking the square root of the mean of the error squared
+error <- test$G3-test$predicted.G3
+rmse <- sqrt(mean(error)^2)
+rmse
+
+res <- residuals(model4) #assigns residuals to values
+
+# Convert residuals to a DataFrame 
+res <- as.data.frame(res)
+
+pl4 <-test %>%  #pipe in a graph of predicted values vs actual values
+  ggplot(aes(G3,predicted.G3)) +
+  geom_point(alpha=0.5) + 
+  stat_smooth(aes(colour='black')) +
+  xlab('Actual value of G3') +
+  ylab('Predicted value of G3')+
+  theme_bw()
+
+ggplotly(pl4)
+
+#creates a histogram with dataset residuals and shows 'res' values on the x-axis, and their counts on the y-axis
+ggplot(res,aes(res)) +  geom_histogram(fill='blue',alpha=0.5)
+
+
+plot(model4) #shows all residuals plots such as Residuals vs Fitted, Q-Q residuals, Scale-Location, and Residuals vs Leverage
+
+# our residuals graph is very good again, with a relative peak around the 0 mark
+# The scatter plot graph is not great again, with the points not being very close to the red line although they do have good variance
+# our other residuals graphs are all right, they work, but could definitely be better
+
+# our rmse score is an improvement but can still be improved
+```
+
+```{r}
+
+model5 <- lm(G3 ~ school + reason + address + sex + health + failures + schoolsup + famsup + higher, data = train)
+summary(model5) #creates a summary of the model telling us which features are most significant, and giving us residuals, standard deviations, and other useful data
+
+test$predicted.G3 <- predict(model5,test) # uses the model and the testing set to predict values for G3 and assigns it to a new column 'predicted.G3' within the 'test' dataset
+
+#calculation for rmse by subtracting actual by predicted and then taking the square root of the mean of the error squared
+error <- test$G3-test$predicted.G3
+rmse <- sqrt(mean(error)^2)
+rmse
+
+res <- residuals(model5) #assigns residuals to values
+
+# Convert residuals to a DataFrame 
+res <- as.data.frame(res)
+
+pl5 <-test %>%  #pipe in a graph of predicted values vs actual values
+  ggplot(aes(G3,predicted.G3)) +
+  geom_point(alpha=0.5) + 
+  stat_smooth(aes(colour='black')) +
+  xlab('Actual value of G3') +
+  ylab('Predicted value of G3')+
+  theme_bw()
+
+ggplotly(pl5)
+
+#creates a histogram with dataset residuals and shows 'res' values on the x-axis, and their counts on the y-axis
+ggplot(res,aes(res)) +  geom_histogram(fill='blue',alpha=0.5)
+
+plot(model5) #shows all residuals plots such as Residuals vs Fitted, Q-Q residuals, Scale-Location, and Residuals vs Leverage
+
+# our residuals graph is all right as it resembles a bell curve around the 0 mark, but we would like the peak to be at 0 rather than it being more of a valley
+# The scatter plot graph is not very good again, with the points not always being very close to the red line or even the grey hashing
+# our other residuals graphs are all right, they work, but could definitely be better
+
+# our best rmse score that we have gotten so far
+```
+
+```{r}
+save(model5,file="studentLinearModel.rda") #saves the model as 'studentLinearModel5.rda' as it is our best Linear regression model that I have gotten
+```
+

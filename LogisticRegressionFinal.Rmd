@@ -1,0 +1,295 @@
+---
+title: "John Serino - Logistic Regression Final"
+output: html_notebook
+---
+
+Using the below dataset found off of Kaggle
+https://www.kaggle.com/datasets/larsen0966/student-performance-data-set?select=student-por.csv
+
+I downloaded the dataset and then used the files menu in the bottom right screen to access the data and then import it
+
+
+```{r}
+student <- student_por #copy student_por dataset into new 'student' dataset to make it easier to work with
+head(student) #display the first 6 rows of data in the dataset
+```
+
+
+```{r}
+tail(student) #display the last 6 rows of data in the dataset
+```
+
+
+```{r}
+summary(student) #summarizes each of the features in the dataset, giving type for features of type character, and giving values for minimum, maximum, 1st Quartile, median, mean, and 3rd Quartile for features with continuous numerical values
+```
+```{r}
+str(student) #gives the type of each feature frame as well as the first four pieces of data for features of type character, and the first 10 pieces of data for features of type numerical
+```
+
+
+```{r}
+is.na(student) #creates a matrix to determine if there are any missing values in the data with 'FALSE' representing there not be a missing value in the spot, and 'TRUE' otherwise
+```
+
+
+```{r}
+#Run code below to see missing values; what's the percentage of missing values?
+library(naniar) #import naniar package to create heatmap for percentage of missing values
+vis_miss(student) #creates the heatmap
+
+
+library(Amelia) #loads the Amelia package into the file
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(student,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+#We can see that there are several missing values
+```
+
+```{r}
+# convert all feature columns of type character to numerical values by factoring each column and turning their factors into numerical values
+student$school<-as.numeric(factor(student$school)) #gives numerical value to school feature
+student$sex<-as.numeric(factor(student$sex)) #gives numerical value to sex feature
+student$address<-as.numeric(factor(student$address)) #gives numerical value to address feature
+student$famsize<-as.numeric(factor(student$famsize)) #gives numerical value to famsize feature
+student$Pstatus<-as.numeric(factor(student$Pstatus)) #gives numerical value to Pstatus feature
+student$Mjob<-as.numeric(factor(student$Mjob)) #gives numerical value to Mjob feature
+student$Fjob<-as.numeric(factor(student$Fjob)) #gives numerical value to Fjob feature
+student$reason<-as.numeric(factor(student$reason)) #gives numerical value to reason feature
+student$guardian<-as.numeric(factor(student$guardian)) #gives numerical value to guardian feature
+student$schoolsup<-as.numeric(factor(student$schoolsup)) #gives numerical value to schoolsup feature
+student$famsup<-as.numeric(factor(student$famsup)) #gives numerical value to famsup feature
+student$paid<-as.numeric(factor(student$paid)) #gives numerical value to paid feature
+student$activities<-as.numeric(factor(student$activities)) #gives numerical value to activities feature
+student$nursery<-as.numeric(factor(student$nursery)) #gives numerical value to nursery feature
+student$higher<-as.numeric(factor(student$higher)) #gives numerical value to higher feature
+student$internet<-as.numeric(factor(student$internet)) #gives numerical value to internet feature
+student$romantic<-as.numeric(factor(student$romantic)) #gives numerical value to romantic feature
+
+```
+
+```{r}
+head(student) #we use the head() function to see that all features have successfully been turned into numerical values
+```
+
+```{r}
+library(ggplot2)
+ggplot(data= student,mapping = aes(x = G3, y = G2)) + geom_point() #creates a scatterplot mapping G3 against G2 to see if there is linearity between our target and the feature columns
+# we see that there is linearity between the target and the feature
+```
+
+
+
+
+```{r}
+library(missForest) #imports the missForest package so that we can work easily with missing data
+#Run the code below which replaces values with 10% missing values; 
+RNGkind(sample.kind = "Rounding") #This line randomly generates missing value numbers
+
+# The code below seeds 10% missing values since student has no missing values so that we can use the MICE package for imputation
+
+set.seed(123) #set a seed for the randomizer
+student.mis <- prodNA(student, noNA = 0.1) #create a new dataset 'student.mis' that removes 10% of the data in the 'Credit' dataset
+head(student.mis) #displays the first 6 rows of data for 'student.mis'
+```
+
+```{r}
+library(naniar) #import naniar package to create heatmap for percentage of missing values
+vis_miss(student.mis) #creates the heatmap
+
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(student.mis,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+
+# Using each graph we can see that 10% of the total data is missing
+```
+
+
+```{r}
+library(mice) #imports the mice package
+
+#impute the data using the mice package with 5 iterations
+imputed_data <- mice(student, m = 5)  
+imputed_student <- complete(imputed_data, action = "long") # finishes the mice imputation
+```
+
+```{r}
+head(imputed_student) #shows the first 6 rows of data of our newly imputed dataset
+```
+
+
+```{r}
+#Look for missing values again by running code below
+vis_miss(imputed_student) #We see there are no missing values
+
+# creates a missingness heat map to show if any of the variables have missing values, showing yellow if that value is missing, and black if that value is present
+missmap(imputed_student,col=c('yellow','black'),y.at=1,y.labels='',legend=TRUE)
+#We can see that there are no more missing values
+```
+
+```{r}
+boxplot(imputed_student) #creates a boxplot of all features so that we can see which features have a significant amount of outliers
+#abscenses has a lot of outliers
+```
+
+```{r}
+library(corrplot) #installs the corrplot package for the cor() function
+library(dplyr) #Installs the dplyr package
+cred.cor<-cor(select(imputed_student,-.imp,-.id)) #creates correlation coefficients for 'imputed_student' with all features aside from the one with a '-' sign above
+corrplot(cred.cor, method="number") #creates a correlation coefficient chart
+
+#G1 and G2 have very high correlation coefficients relative to G3 so we probably shouldn't use them in modeling as they have very high collinearity to our target feature of G3.
+```
+
+```{r}
+
+#The graph below is very much left skewed 
+library(ggplot2) #imports the ggplot2 package into the file
+imputed_student %>% #pipes in a plot displaying the 'G3' variable by the property 'stat_density' with the color theme 'theme_bw()' for black and white
+  ggplot(aes(G3)) +
+  stat_density() + 
+  theme_bw()
+```
+
+
+```{r}
+#Commenting out for project re-runs to occur faster
+# Data looks does not have good standardization as id is all over the place while all other categories have very similarly low data
+
+library(heatmaply) #Imports the heatmaply feature for heatmap creation
+heatmaply(imputed_student, #creates heatmap with labels
+  xlab = "Features",
+  ylab = "Participants", 
+  main = "Raw data")
+```
+
+```{r}
+# commenting out to increase re-load times
+# the data is normalized much better with a much better gradient than we saw previously
+library(heatmaply) #Imports the heatmaply feature for heatmap creation
+heatmaply(
+  normalize(imputed_student), #creates heatmap with labels
+  xlab = "Features",
+  ylab = "Participants", 
+  main = "Raw data")
+```
+
+```{r}
+
+imputed_student$G3Target <- ifelse(imputed_student$G3 >= 12, 1, 0) #creating new column for binary classification of married or not
+
+```
+
+```{r}
+library(caTools) #We import the 'caTools' package into the file
+#set a seed 
+set.seed(123)
+
+# we split the imputed_student data into two different sets, the data_sample set with 75% of the data and everything else which is 25% of the data
+data_sample <- sample(c(TRUE, FALSE), nrow(imputed_student), replace = T, prob = c(0.75, 0.25))
+
+# create a train for the future model using 75% of the data
+train <- imputed_student[data_sample, ]
+# create a test for the future model using the remaining 25% of the data
+test <- imputed_student[!data_sample, ]
+```
+
+
+```{r}
+
+log_model1 <- glm(G3Target ~  school + sex + age + famsize + Medu + Fedu + guardian + traveltime + studytime + failures + activities + freetime,
+                 family = binomial,
+                 data = train)  #creates a logarithmic model in the binomial family with the data from train using the aforementioned features as predictors
+
+summary(log_model1) #creates a summary of the logarithmic model
+
+
+predict_Outcome <- predict(object = log_model1,
+                        newdata = test, type = "response") #creates dataset that applies logarithmic model onto 'testing' dataset
+
+outcomePredictions <- ifelse(predict_Outcome > 0.5, 1, 0) 
+
+pred_ROCR <- prediction(predict_Outcome, test$G3Target) #assigns predicted data to 'pred_ROCR'
+auc_ROCR <- performance(pred_ROCR, measure = 'auc') #assigns auc value of 'pred_ROCR' to 'auc_ROCR'
+plot(performance(pred_ROCR, measure = 'tpr', x.measure = 'fpr'), colorize = TRUE,
+     print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7)) #Creates a plot for the ROC curve
+
+paste('Area under Curve :', signif(auc_ROCR@y.values[[1]]))
+
+#The AUC score is fairly good at .793, but can definitely be improved on
+```
+
+```{r}
+
+log_model2 <- glm(G3Target ~  school + sex + age + famsize + Medu + Fedu + guardian + traveltime + studytime + failures + activities + freetime + higher + nursery,
+                 family = binomial,
+                 data = train) #creates a logarithmic model in the binomial family with the data from train using the aforementioned features as predictors
+
+summary(log_model2) #creates a summary of the logarithmic model
+
+
+predict_Outcome <- predict(object = log_model2,
+                        newdata = test, type = "response") #creates dataset that applies logarithmic model onto 'testing' dataset
+
+outcomePredictions <- ifelse(predict_Outcome > 0.5, 1, 0) 
+
+pred_ROCR <- prediction(predict_Outcome, test$G3Target) #assigns predicted data to 'pred_ROCR'
+auc_ROCR <- performance(pred_ROCR, measure = 'auc') #assigns auc value of 'pred_ROCR' to 'auc_ROCR'
+plot(performance(pred_ROCR, measure = 'tpr', x.measure = 'fpr'), colorize = TRUE,
+     print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7)) #Creates a plot for the ROC curve
+
+paste('Area under Curve :', signif(auc_ROCR@y.values[[1]]))
+
+#slight improvement of the AUC score
+```
+
+
+```{r}
+
+log_model3 <- glm(G3Target ~  school + sex + age + famsize + Medu + Fedu + guardian + traveltime + studytime + failures + activities + freetime + nursery + freetime + absences + health,
+                 family = binomial,
+                 data = train) #creates a logarithmic model in the binomial family with the data from train using the aforementioned features as predictors
+
+summary(log_model3) #creates a summary of the logarithmic model
+
+
+predict_Outcome <- predict(object = log_model3,
+                        newdata = test, type = "response") #creates dataset that applies logarithmic model onto 'testing' dataset
+
+outcomePredictions <- ifelse(predict_Outcome > 0.5, 1, 0) 
+
+pred_ROCR <- prediction(predict_Outcome, test$G3Target) #assigns predicted data to 'pred_ROCR'
+auc_ROCR <- performance(pred_ROCR, measure = 'auc') #assigns auc value of 'pred_ROCR' to 'auc_ROCR'
+plot(performance(pred_ROCR, measure = 'tpr', x.measure = 'fpr'), colorize = TRUE,
+     print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7)) #Creates a plot for the ROC curve
+
+paste('Area under Curve :', signif(auc_ROCR@y.values[[1]]))
+
+#another slight improvement of the AUC score
+```
+
+```{r}
+
+log_model4 <- glm(G3Target ~  school + sex + age + famsize + Medu + Fedu + guardian + traveltime + studytime + failures + activities + freetime + absences + health + nursery + address + Mjob + Fjob + reason + higher,
+                 family = binomial,
+                 data = train) #creates a logarithmic model in the binomial family with the data from train using the aforementioned features as predictors
+
+summary(log_model4) #creates a summary of the logarithmic model
+
+
+predict_Outcome <- predict(object = log_model4,
+                        newdata = test, type = "response") #creates dataset that applies logarithmic model onto 'testing' dataset
+
+outcomePredictions <- ifelse(predict_Outcome > 0.5, 1, 0) 
+
+pred_ROCR <- prediction(predict_Outcome, test$G3Target) #assigns predicted data to 'pred_ROCR'
+auc_ROCR <- performance(pred_ROCR, measure = 'auc') #assigns auc value of 'pred_ROCR' to 'auc_ROCR'
+plot(performance(pred_ROCR, measure = 'tpr', x.measure = 'fpr'), colorize = TRUE,
+     print.cutoffs.at = seq(0, 1, 0.1), text.adj = c(-0.2, 1.7)) #Creates a plot for the ROC curve
+
+paste('Area under Curve :', signif(auc_ROCR@y.values[[1]]))
+
+# The best AUC score that I have been able to find after 10+ attempts of optimizing it, and it gives us a very good ROC graph that is very similar to a logarithmic function
+```
+
+```{r}
+save(log_model4,file="studentLogModel.rda") #saves the model as 'studentLogModel.rda'
+```
